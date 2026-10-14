@@ -40,12 +40,17 @@
 
   // DOM Elements Cache
   const el = {
+    // App Container
+    appContainer: document.querySelector('.app-container'),
+
     // Tabs & Modes
     tabImage: document.getElementById('tab-image-mode'),
     tabWebcam: document.getElementById('tab-webcam-mode'),
     imageStage: document.getElementById('image-stage-view'),
     webcamStage: document.getElementById('webcam-stage-view'),
     samplePresetsGroup: document.getElementById('sample-presets-group'),
+    btnToggleExpand: document.getElementById('btn-toggle-expand'),
+    expandBtnText: document.getElementById('expand-btn-text'),
 
     // Presets
     presetTraffic: document.getElementById('preset-traffic'),
@@ -327,6 +332,19 @@
         restartWebcamInterval();
       }
     });
+
+    // Expand / Theater Mode Screen Toggle
+    if (el.btnToggleExpand) {
+      el.btnToggleExpand.addEventListener('click', () => {
+        const isExpanded = el.appContainer.classList.toggle('theater-mode');
+        if (el.expandBtnText) {
+          el.expandBtnText.textContent = isExpanded ? 'Standard View' : 'Expand Screen';
+        }
+        if (state.mode === 'image' && state.currentImageElement) {
+          setTimeout(renderCanvas, 200);
+        }
+      });
+    }
   }
 
   let debounceTimer = null;
@@ -693,7 +711,7 @@
     try {
       showLoading(true, 'Accessing camera feed...');
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }
+        video: { width: { ideal: 1280, min: 640 }, height: { ideal: 720, min: 480 }, facingMode: 'user' }
       });
       state.webcamStream = stream;
       el.webcamVideo.srcObject = stream;
