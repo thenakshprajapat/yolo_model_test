@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OmniVision AI — Neural Object Detection Prototype</title>
+  <meta name="description" content="State-of-the-art real-time object detection prototype powered by YOLOv8, FastAPI, and WebSocket streaming.">
+  
+  <!-- Modern Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="dark-theme">
+  <!-- Glowing Background Orbs -->
+  <div class="glow-orb orb-1" aria-hidden="true"></div>
+  <div class="glow-orb orb-2" aria-hidden="true"></div>
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="brand">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M3 7V5a2 2 0 0 1 2-2h2"></path>
+          <path d="M17 3h2a2 2 0 0 1 2 2v2"></path>
+          <path d="M21 17v2a2 2 0 0 1-2 2h-2"></path>
+          <path d="M7 21H5a2 2 0 0 1-2-2v-2"></path>
+        </svg>
+      </div>
+      <div>
+        <h1 class="brand-title">OmniVision <span>YOLOv8</span></h1>
+        <p class="brand-subtitle">Real-Time Object Detection & Spatial Perception Prototype</p>
+      </div>
+    </div>
+
+    <!-- System Status Badges -->
+    <div class="header-status">
+      <div class="status-badge" id="model-status-badge">
+        <span class="status-dot"></span>
+        <span id="model-name-text">YOLOv8 Nano • COCO 80</span>
+      </div>
+      <div class="status-badge latency-badge">
+        <span class="metric-label">Latency:</span>
+        <span class="metric-val" id="quick-latency-text">-- ms</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main App Container -->
+  <main class="app-container">
+    
+    <!-- Left Workspace: Viewport & Canvas -->
+    <section class="viewport-section">
+      <!-- Mode Tabs & Controls Bar -->
+      <div class="viewport-toolbar">
+        <div class="mode-tabs">
+          <button class="tab-btn active" id="tab-image-mode">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <circle cx="8.5" cy="8.5" r="1.5"></circle>
+              <polyline points="21 15 16 10 5 21"></polyline>
+            </svg>
+            Image Upload
+          </button>
+          <button class="tab-btn" id="tab-webcam-mode">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 7l-7 5 7 5V7z"></path>
+              <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+            </svg>
+            Live Webcam
+          </button>
+        </div>
+
+        <!-- Sample Presets (For instant testing) -->
+        <div class="sample-presets" id="sample-presets-group">
+          <span class="presets-label">Sample Presets:</span>
+          <button class="preset-btn" id="preset-traffic" title="Test with Busy City Traffic">
+            🚦 Street Traffic
+          </button>
+          <button class="preset-btn" id="preset-livingroom" title="Test with Living Room & Pets">
+            🛋️ Living Room & Pets
+          </button>
+        </div>
+      </div>
+
+      <!-- Main Stage Container -->
+      <div class="stage-wrapper" id="stage-wrapper">
+        
+        <!-- Image Mode Stage -->
+        <div class="stage-view" id="image-stage-view">
+          <!-- Drop Zone (Visible when no image is loaded) -->
+          <div class="drop-zone" id="drop-zone">
+            <div class="drop-zone-content">
+              <div class="upload-icon-pulse">
+                <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="17 8 12 3 7 8"></polyline>
+                  <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+              </div>
+              <h3>Drag & Drop Image Here</h3>
+              <p>Supports PNG, JPG, JPEG, WEBP or click to browse files</p>
+              <label for="image-file-input" class="action-btn-primary browse-btn" id="browse-file-label">
+                Select Local File
+              </label>
+              <input type="file" id="image-file-input" accept="image/*" class="sr-only">
+            </div>
+          </div>
+
+          <!-- Interactive Canvas Viewport (Visible once an image is chosen) -->
+          <div class="canvas-viewport hidden" id="canvas-viewport">
+            <div class="canvas-container" id="canvas-container">
+              <canvas id="display-canvas"></canvas>
+              <!-- Interactive hover tooltip -->
+              <div class="box-hover-tooltip hidden" id="box-tooltip"></div>
+            </div>
+            <!-- Canvas HUD Overlay -->
+            <div class="canvas-hud">
+              <span id="canvas-resolution-hud">1920 × 1080</span>
+              <span id="canvas-detections-hud">0 Objects</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Webcam Mode Stage -->
+        <div class="stage-view hidden" id="webcam-stage-view">
+          <div class="webcam-viewport">
+            <div class="webcam-media-container" id="webcam-media-container">
+              <video id="webcam-video" autoplay playsinline muted></video>
+              <canvas id="webcam-canvas" class="webcam-overlay-canvas"></canvas>
+            </div>
+
+            <div class="webcam-hud">
+              <div class="hud-item" id="webcam-live-hud"><span class="hud-dot live-pulse"></span> LIVE</div>
+              <div class="hud-item" id="webcam-fps-hud">FPS: 0</div>
+              <div class="hud-item hud-pill-person" id="webcam-hud-person">👤 0 Person</div>
+              <div class="hud-item hud-pill-object" id="webcam-hud-object">📦 0 Object</div>
+              <div class="hud-item hud-pill-other" id="webcam-hud-other">⚡ 0 Other</div>
+            </div>
+
+            <!-- Webcam Controls Overlay -->
+            <div class="webcam-overlay-controls" id="webcam-idle-overlay">
+              <button class="action-btn-primary" id="btn-start-webcam">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+                Launch Webcam Detection
+              </button>
+              <p class="webcam-hint">Accesses your camera securely for local real-time inference</p>
+            </div>
+          </div>
+          <div class="webcam-action-bar">
+            <button class="action-btn-secondary" id="btn-stop-webcam" disabled>
+              ⏹ Stop Stream
+            </button>
+            <div class="slider-inline">
+              <label for="stream-interval-slider">Stream Rate:</label>
+              <input type="range" id="stream-interval-slider" min="100" max="600" step="50" value="200">
+              <span id="stream-interval-val">200ms</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Loading / Processing Spinner -->
+        <div class="loading-overlay hidden" id="loading-overlay">
+          <div class="spinner"></div>
+          <p id="loading-status-text">Running YOLOv8 inference...</p>
+        </div>
+
+      </div>
+
+      <!-- Action Footer (Export, Clear, Change Image) -->
+      <div class="viewport-footer">
+        <div class="footer-left">
+          <button class="btn-subtle" id="btn-reupload" title="Upload a different image">
+            📁 Change Image
+          </button>
+          <button class="btn-subtle" id="btn-reset-filters" title="Reset all thresholds">
+            ↺ Reset Controls
+          </button>
+        </div>
+        <div class="footer-right">
+          <button class="btn-subtle" id="btn-export-json" disabled title="Export detected bounding boxes as JSON">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+            </svg>
+            Export JSON
+          </button>
+          <button class="action-btn-primary btn-sm" id="btn-download-annotated" disabled title="Download annotated image with bounding boxes">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Download Render
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Sidebar: Configuration, Telemetry & Detections -->
+    <aside class="sidebar-section">
+      
+      <!-- Real-Time Classification Matrix (Person vs Object vs Something Else) -->
+      <div class="panel classification-panel">
+        <div class="panel-header">
+          <h2>Classification Matrix</h2>
+          <span class="telemetry-tag live-tag">Person | Object | Other</span>
+        </div>
+        <div class="category-cards-grid">
+          <div class="cat-card cat-card-person" id="card-person">
+            <div class="cat-card-header">
+              <span class="cat-icon">👤</span>
+              <span class="cat-title">Person</span>
+            </div>
+            <div class="cat-count" id="cat-count-person">0</div>
+            <div class="cat-status" id="cat-status-person">None detected</div>
+          </div>
+          <div class="cat-card cat-card-object" id="card-object">
+            <div class="cat-card-header">
+              <span class="cat-icon">📦</span>
+              <span class="cat-title">Object</span>
+            </div>
+            <div class="cat-count" id="cat-count-object">0</div>
+            <div class="cat-status" id="cat-status-object">None detected</div>
+          </div>
+          <div class="cat-card cat-card-other" id="card-other">
+            <div class="cat-card-header">
+              <span class="cat-icon">⚡</span>
+              <span class="cat-title">Something Else</span>
+            </div>
+            <div class="cat-count" id="cat-count-other">0</div>
+            <div class="cat-status" id="cat-status-other">Animals / Vehicles</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Telemetry Performance Dashboard -->
+      <div class="panel telemetry-panel">
+        <div class="panel-header">
+          <h2>Inference Telemetry</h2>
+          <span class="telemetry-tag">CPU</span>
+        </div>
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <span class="metric-card-title">Inference</span>
+            <span class="metric-card-value" id="val-inference-ms">--</span>
+            <span class="metric-card-unit">ms</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-card-title">Pre / Post</span>
+            <span class="metric-card-value" id="val-prepost-ms">--</span>
+            <span class="metric-card-unit">ms</span>
+          </div>
+          <div class="metric-card highlight">
+            <span class="metric-card-title">Total Found</span>
+            <span class="metric-card-value" id="val-total-objects">0</span>
+            <span class="metric-card-unit">objects</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-card-title">Est. Speed</span>
+            <span class="metric-card-value" id="val-fps">--</span>
+            <span class="metric-card-unit">FPS</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Detection Controls & Hyperparameters -->
+      <div class="panel controls-panel">
+        <div class="panel-header">
+          <h2>Detection Controls</h2>
+        </div>
+
+        <div class="control-group">
+          <div class="control-label-row">
+            <label for="slider-conf">Confidence Threshold</label>
+            <span class="control-value-badge" id="val-conf-text">0.25 (25%)</span>
+          </div>
+          <input type="range" id="slider-conf" min="0.05" max="0.95" step="0.05" value="0.25" class="custom-slider">
+          <div class="slider-hints">
+            <span>High Recall (5%)</span>
+            <span>Balanced</span>
+            <span>High Precision (95%)</span>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <div class="control-label-row">
+            <label for="slider-iou">NMS IoU Threshold</label>
+            <span class="control-value-badge" id="val-iou-text">0.45</span>
+          </div>
+          <input type="range" id="slider-iou" min="0.10" max="0.90" step="0.05" value="0.45" class="custom-slider">
+          <div class="slider-hints">
+            <span>Aggressive overlap filter</span>
+            <span>Standard (0.45)</span>
+          </div>
+        </div>
+
+        <!-- Visualization Switches -->
+        <div class="control-group">
+          <label class="section-sublabel">Render Options</label>
+          <div class="toggles-grid">
+            <label class="toggle-control" for="toggle-labels">
+              <input type="checkbox" id="toggle-labels" checked>
+              <span class="toggle-indicator"></span>
+              <span class="toggle-text">Show Labels</span>
+            </label>
+            <label class="toggle-control" for="toggle-conf">
+              <input type="checkbox" id="toggle-conf" checked>
+              <span class="toggle-indicator"></span>
+              <span class="toggle-text">Confidence %</span>
+            </label>
+            <label class="toggle-control" for="toggle-boxes">
+              <input type="checkbox" id="toggle-boxes" checked>
+              <span class="toggle-indicator"></span>
+              <span class="toggle-text">Bounding Boxes</span>
+            </label>
+            <label class="toggle-control" for="toggle-fill">
+              <input type="checkbox" id="toggle-fill" checked>
+              <span class="toggle-indicator"></span>
+              <span class="toggle-text">Box Shading</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Class Filter Selector -->
+        <div class="control-group">
+          <div class="control-label-row">
+            <label for="class-search-input">Target Classes Filter</label>
+            <button class="btn-link" id="btn-select-all-classes">Select All</button>
+          </div>
+          <input type="text" id="class-search-input" placeholder="Search classes (e.g. person, car, dog)..." class="custom-input">
+          <div class="class-chips-container" id="class-chips-container">
+            <!-- Dynamically populated chips -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Detected Objects List & Class Breakdown -->
+      <div class="panel results-panel">
+        <div class="panel-header">
+          <h2>Detected Entities</h2>
+          <span class="count-badge" id="results-count-badge">0 items</span>
+        </div>
+
+        <!-- Class summary tabs (e.g., person: 11, car: 10) -->
+        <div class="class-summary-bar" id="class-summary-bar">
+          <span class="empty-hint">Run detection to view entity distribution</span>
+        </div>
+
+        <!-- Scrollable detections card list -->
+        <div class="detections-list" id="detections-list">
+          <div class="empty-state" id="detections-empty-state">
+            <p>No objects analyzed yet. Select a sample above or drop an image.</p>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+
+  </main>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
